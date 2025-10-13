@@ -1,0 +1,29 @@
+{
+  "name": "secure-auth-backend",
+  "version": "1.0.0",
+  "description": "Secure Authentication Demo Backend with HTTPS and JWT",
+  "main": "server.js",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "generate-cert": "node generate-cert.js"
+  },
+  "keywords": [
+    "authentication",
+    "jwt",
+    "bcrypt",
+    "https",
+    "security"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "selfsigned": "^2.4.1"
+  }
+}
