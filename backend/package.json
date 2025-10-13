@@ -5,6 +5,8 @@
   "main": "server.js",
   "scripts": {
     "dev": "node server.js",
+    "dev:http": "USE_HTTPS=false node server.js",
+    "dev:https": "node server.js",
     "start": "node server.js",
     "generate-cert": "node generate-cert.js"
   },

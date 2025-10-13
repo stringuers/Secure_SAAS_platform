@@ -2,7 +2,7 @@ const selfsigned = require('selfsigned');
 const fs = require('fs');
 const path = require('path');
 
-console.log('🔐 Generating self-signed SSL certificate...\n');
+console.log(' Generating self-signed SSL certificate...\n');
 
 const attrs = [
   { name: 'commonName', value: 'localhost' },

@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Shield, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { API_ENDPOINTS } from "@/config/api";
 
 const Register = () => {
   const navigate = useNavigate();
@@ -42,7 +43,7 @@ const Register = () => {
     setLoading(true);
 
     try {
-      const response = await fetch("https://localhost:3001/api/auth/register", {
+      const response = await fetch(API_ENDPOINTS.register, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

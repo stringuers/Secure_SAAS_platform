@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Shield, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { API_ENDPOINTS } from "@/config/api";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -22,7 +23,7 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const response = await fetch("https://localhost:3001/api/auth/login", {
+      const response = await fetch(API_ENDPOINTS.login, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -1,4 +1,5 @@
 const https = require('https');
+const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
@@ -9,13 +10,14 @@ const path = require('path');
 const app = express();
 const PORT = 3001;
 const JWT_SECRET = 'your-secret-key-change-in-production';
+const USE_HTTPS = process.env.USE_HTTPS !== 'false'; // Default to HTTPS
 
 // In-memory database (replace with real database in production)
 const users = [];
 
 // Middleware
 app.use(cors({
-  origin: 'http://localhost:8080',
+  origin: ['http://localhost:8080', 'https://localhost:8080'],
   credentials: true
 }));
 app.use(express.json());
@@ -174,27 +176,46 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Create HTTPS server with self-signed certificate
-const sslDir = path.join(__dirname, 'ssl');
+// Start server (HTTP or HTTPS based on configuration)
+if (USE_HTTPS) {
+  // Create HTTPS server with self-signed certificate
+  const sslDir = path.join(__dirname, 'ssl');
 
-// Check if SSL certificates exist
-if (!fs.existsSync(path.join(sslDir, 'key.pem')) || !fs.existsSync(path.join(sslDir, 'cert.pem'))) {
-  console.error('\n❌ SSL certificates not found!');
-  console.error('Please run: npm run generate-cert\n');
-  process.exit(1);
+  // Check if SSL certificates exist
+  if (!fs.existsSync(path.join(sslDir, 'key.pem')) || !fs.existsSync(path.join(sslDir, 'cert.pem'))) {
+    console.error('\n❌ SSL certificates not found!');
+    console.error('Please run: npm run generate-cert');
+    console.error('Or start in HTTP mode: USE_HTTPS=false npm run dev\n');
+    process.exit(1);
+  }
+
+  const httpsOptions = {
+    key: fs.readFileSync(path.join(sslDir, 'key.pem')),
+    cert: fs.readFileSync(path.join(sslDir, 'cert.pem'))
+  };
+
+  https.createServer(httpsOptions, app).listen(PORT, () => {
+    console.log('\n🔒 HTTPS Server running on https://localhost:' + PORT);
+    console.log('📊 Ready to capture with Wireshark!');
+    console.log('\n⚠️  Browser Warning: You may need to accept the self-signed certificate');
+    console.log('   Visit https://localhost:3001/api/health in your browser first');
+    console.log('   Click "Advanced" → "Proceed to localhost"\n');
+    console.log('Endpoints:');
+    console.log('  POST /api/auth/register - Register new user');
+    console.log('  POST /api/auth/login    - Login user');
+    console.log('  GET  /api/user/profile  - Get user profile (requires JWT)');
+    console.log('  GET  /api/health        - Health check\n');
+  });
+} else {
+  // Create HTTP server (for development without SSL issues)
+  http.createServer(app).listen(PORT, () => {
+    console.log('\n🌐 HTTP Server running on http://localhost:' + PORT);
+    console.log('⚠️  Running in HTTP mode - no encryption!');
+    console.log('   For HTTPS/TLS demo: USE_HTTPS=true npm run dev\n');
+    console.log('Endpoints:');
+    console.log('  POST /api/auth/register - Register new user');
+    console.log('  POST /api/auth/login    - Login user');
+    console.log('  GET  /api/user/profile  - Get user profile (requires JWT)');
+    console.log('  GET  /api/health        - Health check\n');
+  });
 }
-
-const httpsOptions = {
-  key: fs.readFileSync(path.join(sslDir, 'key.pem')),
-  cert: fs.readFileSync(path.join(sslDir, 'cert.pem'))
-};
-
-https.createServer(httpsOptions, app).listen(PORT, () => {
-  console.log('\n🔒 HTTPS Server running on https://localhost:' + PORT);
-  console.log('📊 Ready to capture with Wireshark!');
-  console.log('\nEndpoints:');
-  console.log('  POST /api/auth/register - Register new user');
-  console.log('  POST /api/auth/login    - Login user');
-  console.log('  GET  /api/user/profile  - Get user profile (requires JWT)');
-  console.log('  GET  /api/health        - Health check\n');
-});
