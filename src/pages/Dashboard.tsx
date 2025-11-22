@@ -60,7 +60,7 @@ const Dashboard = () => {
     <div className="min-h-screen bg-background">
       <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-accent/5" />
       <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iaHNsKDE5NSwgODUlLCA1NSUsIDAuMSkiIHN0cm9rZS13aWR0aD0iMSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0idXJsKCNncmlkKSIvPjwvc3ZnPg==')] opacity-20" />
-      
+
       <div className="relative container mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
@@ -73,14 +73,24 @@ const Dashboard = () => {
               <p className="text-sm text-muted-foreground">Authentication successful</p>
             </div>
           </div>
-          <Button
-            onClick={handleLogout}
-            variant="outline"
-            className="border-border hover:bg-destructive/10 hover:text-destructive hover:border-destructive/50"
-          >
-            <LogOut className="w-4 h-4 mr-2" />
-            Logout
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => navigate('/security-dashboard')}
+              variant="outline"
+              className="border-border hover:bg-primary/10 hover:text-primary hover:border-primary/50"
+            >
+              <Shield className="w-4 h-4 mr-2" />
+              Security Monitor
+            </Button>
+            <Button
+              onClick={handleLogout}
+              variant="outline"
+              className="border-border hover:bg-destructive/10 hover:text-destructive hover:border-destructive/50"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Logout
+            </Button>
+          </div>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-6 max-w-6xl mx-auto">
@@ -92,13 +102,13 @@ const Dashboard = () => {
               </div>
               <h2 className="text-xl font-semibold">User Information</h2>
             </div>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="text-sm text-muted-foreground">Email</label>
                 <p className="text-lg font-mono">{user.email}</p>
               </div>
-              
+
               {user.id && (
                 <div>
                   <label className="text-sm text-muted-foreground">User ID</label>
@@ -123,7 +133,7 @@ const Dashboard = () => {
               </div>
               <h2 className="text-xl font-semibold">JWT Token</h2>
             </div>
-            
+
             <div className="space-y-4">
               <div>
                 <label className="text-sm text-muted-foreground mb-2 block">Token (Truncated)</label>
@@ -153,7 +163,7 @@ const Dashboard = () => {
               <Shield className="w-5 h-5 text-primary" />
               Security Features Active
             </h2>
-            
+
             <div className="grid md:grid-cols-3 gap-6">
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-success mb-2">

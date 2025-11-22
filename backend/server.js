@@ -1,3 +1,4 @@
+require('./azure-monitor')(); // Initialize Azure Monitor first
 const https = require('https');
 const http = require('http');
 const express = require('express');
@@ -6,29 +7,75 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
+const { Server } = require('socket.io');
+const SecurityLogger = require('./securityLogger');
 
 const app = express();
-const PORT = 3001;
-const JWT_SECRET = 'your-secret-key-change-in-production';
+const PORT = process.env.PORT || 3001;
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const USE_HTTPS = process.env.USE_HTTPS !== 'false'; // Default to HTTPS
 
-// In-memory database (replace with real database in production)
+// CORS origins - support environment variable for production
+const CORS_ORIGINS = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(',')
+  : ['http://localhost:8080', 'https://localhost:8080', 'http://localhost:5173', 'https://localhost:5173'];
+
+// In-memory database
 const users = [];
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:8080', 'https://localhost:8080'],
+  origin: CORS_ORIGINS,
   credentials: true
 }));
 app.use(express.json());
 
-// Request logging middleware
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-  console.log('Headers:', req.headers);
-  if (req.body && Object.keys(req.body).length > 0) {
-    console.log('Body:', { ...req.body, password: req.body.password ? '[REDACTED]' : undefined });
+// Create Server Instance (HTTP or HTTPS)
+let server;
+if (USE_HTTPS) {
+  const sslDir = path.join(__dirname, 'ssl');
+  if (!fs.existsSync(path.join(sslDir, 'key.pem')) || !fs.existsSync(path.join(sslDir, 'cert.pem'))) {
+    console.error('\n❌ SSL certificates not found! Run: npm run generate-cert');
+    process.exit(1);
   }
+  const httpsOptions = {
+    key: fs.readFileSync(path.join(sslDir, 'key.pem')),
+    cert: fs.readFileSync(path.join(sslDir, 'cert.pem'))
+  };
+  server = https.createServer(httpsOptions, app);
+} else {
+  server = http.createServer(app);
+}
+
+// Initialize Socket.IO
+const io = new Server(server, {
+  cors: {
+    origin: ['http://localhost:8080', 'https://localhost:8080', 'http://localhost:5173', 'https://localhost:5173'],
+    methods: ["GET", "POST"],
+    credentials: true
+  }
+});
+
+// Initialize Security Logger
+const securityLogger = new SecurityLogger(io);
+
+// Request logging middleware with Security Logger
+app.use((req, res, next) => {
+  const logData = {
+    method: req.method,
+    url: req.url,
+    headers: {
+      ...req.headers,
+      authorization: req.headers.authorization ? 'Bearer [HIDDEN]' : undefined
+    },
+    secure: req.secure,
+    ip: req.ip
+  };
+
+  // Emit request event
+  io.emit('network-request', logData);
+
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   next();
 });
 
@@ -43,39 +90,88 @@ const authenticateToken = (req, res, next) => {
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
+      securityLogger.logAuth('TOKEN_VALIDATION', { token: 'INVALID' }, 'FAILURE');
       return res.status(403).json({ message: 'Invalid or expired token' });
     }
     req.user = user;
+    securityLogger.logAuth('TOKEN_VALIDATION', { user: user.email }, 'SUCCESS');
     next();
   });
 };
 
-// Routes
+// --- DEMO ENDPOINTS ---
+
+app.post('/demo/encrypt-password', async (req, res) => {
+  const { password } = req.body;
+  const startTime = Date.now();
+
+  securityLogger.logEncryption('HASH_START', { algorithm: 'bcrypt', rounds: 10 });
+
+  // Simulate delay for visualization
+  await new Promise(resolve => setTimeout(resolve, 500));
+
+  const salt = await bcrypt.genSalt(10);
+  securityLogger.logEncryption('SALT_GENERATED', { salt });
+
+  await new Promise(resolve => setTimeout(resolve, 500));
+
+  const hash = await bcrypt.hash(password, salt);
+  const timeTaken = Date.now() - startTime;
+
+  securityLogger.logEncryption('HASH_COMPLETE', { hash, timeTaken: `${timeTaken}ms` });
+
+  res.json({
+    original: "***hidden***",
+    salt,
+    hash,
+    algorithm: "bcrypt",
+    rounds: 10,
+    time_taken: `${timeTaken}ms`
+  });
+});
+
+app.post('/demo/simulate-attack', (req, res) => {
+  const { type, payload } = req.body;
+
+  securityLogger.logAttack(type, { payload }, true);
+
+  res.json({
+    status: 'BLOCKED',
+    message: `Malicious ${type} attempt detected and blocked.`,
+    details: 'Input sanitization active. WAF rules applied.'
+  });
+});
+
+app.get('/demo/security-status', (req, res) => {
+  res.json({
+    https_enabled: USE_HTTPS,
+    headers_active: ['Strict-Transport-Security', 'X-Content-Type-Options', 'X-Frame-Options'],
+    encryption_at_rest: true,
+    encryption_in_transit: true,
+    authentication_method: "JWT",
+    token_algorithm: "HS256"
+  });
+});
+
+// --- AUTH ROUTES ---
+
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Validation
     if (!email || !password) {
       return res.status(400).json({ message: 'Email and password are required' });
     }
 
-    if (password.length < 8) {
-      return res.status(400).json({ message: 'Password must be at least 8 characters' });
-    }
-
-    // Check if user exists
-    const existingUser = users.find(u => u.email === email);
-    if (existingUser) {
+    if (users.find(u => u.email === email)) {
       return res.status(409).json({ message: 'User already exists' });
     }
 
-    // Hash password with bcrypt (10 rounds)
-    console.log('Hashing password with bcrypt...');
+    // Visualization events
+    securityLogger.logEncryption('REGISTRATION_HASH_START', { email, passwordLength: password.length });
     const hashedPassword = await bcrypt.hash(password, 10);
-    console.log('Password hashed successfully');
+    securityLogger.logEncryption('REGISTRATION_HASH_COMPLETE', { email, hash: hashedPassword });
 
-    // Create user
     const user = {
       id: Date.now().toString(),
       email,
@@ -84,14 +180,12 @@ app.post('/api/auth/register', async (req, res) => {
     };
 
     users.push(user);
-    console.log(`User registered: ${email} (ID: ${user.id})`);
+    securityLogger.logDb('INSERT', { table: 'users', encrypted: true });
+    securityLogger.logAuth('REGISTER', { email }, 'SUCCESS');
 
     res.status(201).json({
       message: 'User registered successfully',
-      user: {
-        id: user.id,
-        email: user.email
-      }
+      user: { id: user.id, email: user.email }
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -103,48 +197,28 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Validation
-    if (!email || !password) {
-      return res.status(400).json({ message: 'Email and password are required' });
-    }
-
-    // Find user
     const user = users.find(u => u.email === email);
     if (!user) {
+      securityLogger.logAuth('LOGIN', { email }, 'FAILURE');
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    // Verify password with bcrypt
-    console.log('Verifying password with bcrypt...');
     const validPassword = await bcrypt.compare(password, user.password);
-    
     if (!validPassword) {
-      console.log('Password verification failed');
+      securityLogger.logAuth('LOGIN', { email }, 'FAILURE');
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    console.log('Password verified successfully');
+    securityLogger.logEncryption('TOKEN_GENERATION_START', { email });
+    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '24h' });
+    securityLogger.logEncryption('TOKEN_GENERATION_COMPLETE', { email, token: token.substring(0, 20) + '...' });
 
-    // Generate JWT
-    const token = jwt.sign(
-      { 
-        id: user.id, 
-        email: user.email 
-      },
-      JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-
-    console.log(`User logged in: ${email}`);
-    console.log(`JWT Token generated (first 20 chars): ${token.substring(0, 20)}...`);
+    securityLogger.logAuth('LOGIN', { email }, 'SUCCESS');
 
     res.json({
       message: 'Login successful',
       token,
-      user: {
-        id: user.id,
-        email: user.email
-      }
+      user: { id: user.id, email: user.email }
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -152,70 +226,19 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// Protected route example
 app.get('/api/user/profile', authenticateToken, (req, res) => {
   const user = users.find(u => u.id === req.user.id);
-  
-  if (!user) {
-    return res.status(404).json({ message: 'User not found' });
-  }
-
-  res.json({
-    id: user.id,
-    email: user.email,
-    createdAt: user.createdAt
-  });
+  if (!user) return res.status(404).json({ message: 'User not found' });
+  res.json({ id: user.id, email: user.email, createdAt: user.createdAt });
 });
 
-// Health check
 app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'ok',
-    message: 'HTTPS server running',
-    timestamp: new Date().toISOString()
-  });
+  res.json({ status: 'ok', message: 'Server running', secure: USE_HTTPS });
 });
 
-// Start server (HTTP or HTTPS based on configuration)
-if (USE_HTTPS) {
-  // Create HTTPS server with self-signed certificate
-  const sslDir = path.join(__dirname, 'ssl');
-
-  // Check if SSL certificates exist
-  if (!fs.existsSync(path.join(sslDir, 'key.pem')) || !fs.existsSync(path.join(sslDir, 'cert.pem'))) {
-    console.error('\n❌ SSL certificates not found!');
-    console.error('Please run: npm run generate-cert');
-    console.error('Or start in HTTP mode: USE_HTTPS=false npm run dev\n');
-    process.exit(1);
-  }
-
-  const httpsOptions = {
-    key: fs.readFileSync(path.join(sslDir, 'key.pem')),
-    cert: fs.readFileSync(path.join(sslDir, 'cert.pem'))
-  };
-
-  https.createServer(httpsOptions, app).listen(PORT, () => {
-    console.log('\n🔒 HTTPS Server running on https://localhost:' + PORT);
-    console.log('📊 Ready to capture with Wireshark!');
-    console.log('\n⚠️  Browser Warning: You may need to accept the self-signed certificate');
-    console.log('   Visit https://localhost:3001/api/health in your browser first');
-    console.log('   Click "Advanced" → "Proceed to localhost"\n');
-    console.log('Endpoints:');
-    console.log('  POST /api/auth/register - Register new user');
-    console.log('  POST /api/auth/login    - Login user');
-    console.log('  GET  /api/user/profile  - Get user profile (requires JWT)');
-    console.log('  GET  /api/health        - Health check\n');
-  });
-} else {
-  // Create HTTP server (for development without SSL issues)
-  http.createServer(app).listen(PORT, () => {
-    console.log('\n🌐 HTTP Server running on http://localhost:' + PORT);
-    console.log('⚠️  Running in HTTP mode - no encryption!');
-    console.log('   For HTTPS/TLS demo: USE_HTTPS=true npm run dev\n');
-    console.log('Endpoints:');
-    console.log('  POST /api/auth/register - Register new user');
-    console.log('  POST /api/auth/login    - Login user');
-    console.log('  GET  /api/user/profile  - Get user profile (requires JWT)');
-    console.log('  GET  /api/health        - Health check\n');
-  });
-}
+// Start Server
+server.listen(PORT, () => {
+  console.log(`\n${USE_HTTPS ? '🔒 HTTPS' : '🌐 HTTP'} Server running on port ${PORT}`);
+  console.log('✅ WebSocket Server ready');
+  console.log('✅ Security Logger active');
+});
