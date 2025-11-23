@@ -29,6 +29,14 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
+// Serve static frontend files in production
+const publicFrontendPath = path.join(__dirname, 'public-frontend');
+if (fs.existsSync(publicFrontendPath)) {
+  console.log('📂 Serving frontend from:', publicFrontendPath);
+  app.use(express.static(publicFrontendPath));
+} else {
+  console.log('⚠️ Frontend build not found at:', publicFrontendPath);
+}
 
 // Create Server Instance (HTTP or HTTPS)
 let server;
@@ -235,7 +243,15 @@ app.get('/api/user/profile', authenticateToken, (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server running', secure: USE_HTTPS });
 });
-
+// Catch-all route to serve React App (SPA)
+app.get('*', (req, res) => {
+  const indexHtml = path.join(__dirname, 'public-frontend', 'index.html');
+  if (fs.existsSync(indexHtml)) {
+    res.sendFile(indexHtml);
+  } else {
+    res.status(404).send('Frontend not found. Please build the frontend and restart the server.');
+  }
+});
 // Start Server
 server.listen(PORT, () => {
   console.log(`\n${USE_HTTPS ? '🔒 HTTPS' : '🌐 HTTP'} Server running on port ${PORT}`);
